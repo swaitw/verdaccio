@@ -7,14 +7,18 @@ assignees: ''
 ---
 
 <!--
+IMPORTANT: If you don't have an action plan, please consider create a DISCUSSION (idea) instead for an open a feature request issue.
+
+https://github.com/verdaccio/verdaccio/discussions/new
 
 Verdaccio is a project addressed for voluntaries, if you appreciate this project consider to donate.
+1$/5$ or custom amount single contribution
+
+or monthly
 1$/month - minimal contribution
 5$/month - nice contribution
-500$ - help to promote this project, marketing, stickers.
-2000$/year - sponsor status, your company logo will be in our readme, meetups talks and your request will have high priority
 
-https://opencollective.com/verdaccio
+https://github.com/sponsors/verdaccio
 
 As reminder, the Open Source must be sustainable.
 -->

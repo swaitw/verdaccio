@@ -1,10 +1,20 @@
-import _ from 'lodash';
 import { Response, Router } from 'express';
+import _ from 'lodash';
 
-import { API_ERROR, APP_ERROR, HTTP_STATUS, SUPPORT_ERRORS } from '@verdaccio/commons-api';
-import { ErrorCode, validatePassword } from '@verdaccio/utils';
-import { IAuth } from '@verdaccio/auth';
-import { $RequestExtend, $NextFunctionVer } from '../../types/custom';
+import { Auth } from '@verdaccio/auth';
+import {
+  API_ERROR,
+  APP_ERROR,
+  HTTP_STATUS,
+  SUPPORT_ERRORS,
+  errorUtils,
+  validatioUtils,
+} from '@verdaccio/core';
+import { PROFILE_API_ENDPOINTS } from '@verdaccio/middleware';
+import { rateLimit } from '@verdaccio/middleware';
+import { Config } from '@verdaccio/types';
+
+import { $NextFunctionVer, $RequestExtend } from '../../types/custom';
 
 export interface Profile {
   tfa: boolean;
@@ -17,7 +27,7 @@ export interface Profile {
   fullname: string;
 }
 
-export default function (route: Router, auth: IAuth): void {
+export default function (route: Router, auth: Auth, config: Config): void {
   function buildProfile(name: string): Profile {
     return {
       tfa: false,
@@ -32,7 +42,8 @@ export default function (route: Router, auth: IAuth): void {
   }
 
   route.get(
-    '/-/npm/v1/user',
+    PROFILE_API_ENDPOINTS.get_profile,
+    rateLimit(config?.userRateLimit),
     function (req: $RequestExtend, res: Response, next: $NextFunctionVer): void {
       if (_.isNil(req.remote_user.name) === false) {
         return next(buildProfile(req.remote_user.name));
@@ -46,7 +57,8 @@ export default function (route: Router, auth: IAuth): void {
   );
 
   route.post(
-    '/-/npm/v1/user',
+    PROFILE_API_ENDPOINTS.get_profile,
+    rateLimit(config?.userRateLimit),
     function (req: $RequestExtend, res: Response, next: $NextFunctionVer): void {
       if (_.isNil(req.remote_user.name)) {
         res.status(HTTP_STATUS.UNAUTHORIZED);
@@ -59,10 +71,19 @@ export default function (route: Router, auth: IAuth): void {
       const { name } = req.remote_user;
 
       if (_.isNil(password) === false) {
-        if (validatePassword(password.new) === false) {
+        if (
+          validatioUtils.validatePassword(
+            password.new,
+            config?.serverSettings?.passwordValidationRegex
+          ) === false
+        ) {
           /* eslint new-cap:off */
-          return next(ErrorCode.getCode(HTTP_STATUS.UNAUTHORIZED, API_ERROR.PASSWORD_SHORT()));
+          return next(errorUtils.getCode(HTTP_STATUS.UNAUTHORIZED, API_ERROR.PASSWORD_SHORT));
           /* eslint new-cap:off */
+        }
+
+        if (_.isEmpty(password.old)) {
+          return next(errorUtils.getBadRequest('old password is required'));
         }
 
         auth.changePassword(
@@ -71,23 +92,21 @@ export default function (route: Router, auth: IAuth): void {
           password.new,
           (err, isUpdated): $NextFunctionVer => {
             if (_.isNull(err) === false) {
-              return next(
-                ErrorCode.getCode(err.status, err.message) || ErrorCode.getConflict(err.message)
-              );
+              return next(errorUtils.getForbidden(err.message));
             }
 
             if (isUpdated) {
               return next(buildProfile(req.remote_user.name));
             }
-            return next(ErrorCode.getInternalError(API_ERROR.INTERNAL_SERVER_ERROR));
+            return next(errorUtils.getInternalError(API_ERROR.INTERNAL_SERVER_ERROR));
           }
         );
       } else if (_.isNil(tfa) === false) {
         return next(
-          ErrorCode.getCode(HTTP_STATUS.SERVICE_UNAVAILABLE, SUPPORT_ERRORS.TFA_DISABLED)
+          errorUtils.getCode(HTTP_STATUS.SERVICE_UNAVAILABLE, SUPPORT_ERRORS.TFA_DISABLED)
         );
       } else {
-        return next(ErrorCode.getCode(HTTP_STATUS.INTERNAL_ERROR, APP_ERROR.PROFILE_ERROR));
+        return next(errorUtils.getCode(HTTP_STATUS.INTERNAL_ERROR, APP_ERROR.PROFILE_ERROR));
       }
     }
   );

@@ -1,4 +1,6 @@
-import { generateRandomSecretKey, TOKEN_VALID_LENGTH } from '../src/token';
+import { expect, test } from 'vitest';
+
+import { TOKEN_VALID_LENGTH, generateRandomSecretKey } from '../src/token';
 
 test('token test valid length', () => {
   const token = generateRandomSecretKey();

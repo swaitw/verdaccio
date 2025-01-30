@@ -1,20 +1,43 @@
 import path from 'path';
-import { configExample as config } from '@verdaccio/mock';
 
-export const authProfileConf = config({
-  auth: {
-    [`${path.join(__dirname, '../partials/plugin/authenticate.success')}`]: {},
-  },
-});
+import { getDefaultConfig } from '@verdaccio/config';
 
-export const authPluginFailureConf = config({
+export const authProfileConf = {
+  ...getDefaultConfig(),
+  plugins: path.join(__dirname, '../partials/plugin'),
   auth: {
-    [`${path.join(__dirname, '../partials/plugin/authenticate.fail')}`]: {},
+    success: {},
   },
-});
+};
 
-export const authPluginPassThrougConf = config({
+export const authChangePasswordConf = {
+  ...getDefaultConfig(),
+  plugins: path.join(__dirname, '../partials/plugin'),
   auth: {
-    [`${path.join(__dirname, '../partials/plugin/authenticate.passthroug')}`]: {},
+    'change-password': {},
   },
-});
+};
+
+export const authPluginFailureConf = {
+  ...getDefaultConfig(),
+  plugins: path.join(__dirname, '../partials/plugin'),
+  auth: {
+    fail: {},
+  },
+};
+
+export const authPluginPassThrougConf = {
+  ...getDefaultConfig(),
+  plugins: path.join(__dirname, '../partials/plugin'),
+  auth: {
+    passthroug: {},
+  },
+};
+
+export const authFailInvalidMethod = {
+  ...getDefaultConfig(),
+  plugins: path.join(__dirname, '../partials/plugin'),
+  auth: {
+    'fail-invalid-method': {},
+  },
+};

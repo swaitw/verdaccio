@@ -1,14 +1,17 @@
-import _ from 'lodash';
-import { HTTP_STATUS, SUPPORT_ERRORS, getInternalError } from '@verdaccio/commons-api';
-import { ErrorCode, stringToMD5, mask } from '@verdaccio/utils';
-import { getApiToken } from '@verdaccio/auth';
-import { logger } from '@verdaccio/logger';
 import { Response, Router } from 'express';
+import _ from 'lodash';
 
+import { getApiToken } from '@verdaccio/auth';
+import { Auth } from '@verdaccio/auth';
+import { HEADERS, HTTP_STATUS, SUPPORT_ERRORS, errorUtils } from '@verdaccio/core';
+import { rateLimit } from '@verdaccio/middleware';
+import { TOKEN_API_ENDPOINTS } from '@verdaccio/middleware';
+import { Storage } from '@verdaccio/store';
 import { Config, RemoteUser, Token } from '@verdaccio/types';
-import { IAuth } from '@verdaccio/auth';
-import { IStorageHandler } from '@verdaccio/store';
-import { $RequestExtend, $NextFunctionVer } from '../../types/custom';
+import { Logger } from '@verdaccio/types';
+import { mask, stringToMD5 } from '@verdaccio/utils';
+
+import { $NextFunctionVer, $RequestExtend } from '../../types/custom';
 
 export type NormalizeToken = Token & {
   created: string;
@@ -24,12 +27,14 @@ function normalizeToken(token: Token): NormalizeToken {
 // https://github.com/npm/npm-profile/blob/latest/lib/index.js
 export default function (
   route: Router,
-  auth: IAuth,
-  storage: IStorageHandler,
-  config: Config
+  auth: Auth,
+  storage: Storage,
+  config: Config,
+  logger: Logger
 ): void {
   route.get(
-    '/-/npm/v1/tokens',
+    TOKEN_API_ENDPOINTS.get_tokens,
+    rateLimit(config?.userRateLimit),
     async function (req: $RequestExtend, res: Response, next: $NextFunctionVer) {
       const { name } = req.remote_user;
 
@@ -46,43 +51,44 @@ export default function (
               next: '', // TODO: pagination?
             },
           });
-        } catch (error) {
+        } catch (error: any) {
           logger.error({ error: error.msg }, 'token list has failed: @{error}');
-          return next(ErrorCode.getCode(HTTP_STATUS.INTERNAL_ERROR, error.message));
+          return next(errorUtils.getCode(HTTP_STATUS.INTERNAL_ERROR, error.message));
         }
       }
-      return next(ErrorCode.getUnauthorized());
+      return next(errorUtils.getUnauthorized());
     }
   );
 
   route.post(
-    '/-/npm/v1/tokens',
+    TOKEN_API_ENDPOINTS.get_tokens,
+    rateLimit(config?.userRateLimit),
     function (req: $RequestExtend, res: Response, next: $NextFunctionVer) {
       const { password, readonly, cidr_whitelist } = req.body;
       const { name } = req.remote_user;
 
       if (!_.isBoolean(readonly) || !_.isArray(cidr_whitelist)) {
-        return next(ErrorCode.getCode(HTTP_STATUS.BAD_DATA, SUPPORT_ERRORS.PARAMETERS_NOT_VALID));
+        return next(errorUtils.getCode(HTTP_STATUS.BAD_DATA, SUPPORT_ERRORS.PARAMETERS_NOT_VALID));
       }
 
-      auth.authenticate(name, password, async (err, user: RemoteUser) => {
+      auth.authenticate(name, password, async (err, user?: RemoteUser) => {
         if (err) {
           const errorCode = err.message ? HTTP_STATUS.UNAUTHORIZED : HTTP_STATUS.INTERNAL_ERROR;
-          return next(ErrorCode.getCode(errorCode, err.message));
+          return next(errorUtils.getCode(errorCode, err.message));
         }
 
         req.remote_user = user;
 
         if (!_.isFunction(storage.saveToken)) {
           return next(
-            ErrorCode.getCode(HTTP_STATUS.NOT_IMPLEMENTED, SUPPORT_ERRORS.STORAGE_NOT_IMPLEMENT)
+            errorUtils.getCode(HTTP_STATUS.NOT_IMPLEMENTED, SUPPORT_ERRORS.STORAGE_NOT_IMPLEMENT)
           );
         }
 
         try {
-          const token = await getApiToken(auth, config, user, password);
+          const token = await getApiToken(auth, config, user as RemoteUser, password);
           if (!token) {
-            throw getInternalError();
+            throw errorUtils.getInternalError();
           }
 
           const key = stringToMD5(token);
@@ -106,6 +112,7 @@ export default function (
 
           await storage.saveToken(saveToken);
           logger.debug({ key, name }, 'token @{key} was created for user @{name}');
+          res.set(HEADERS.CACHE_CONTROL, 'no-cache, no-store');
           return next(
             normalizeToken({
               token,
@@ -116,16 +123,17 @@ export default function (
               created: saveToken.created,
             })
           );
-        } catch (error) {
+        } catch (error: any) {
           logger.error({ error: error.msg }, 'token creation has failed: @{error}');
-          return next(ErrorCode.getCode(HTTP_STATUS.INTERNAL_ERROR, error.message));
+          return next(errorUtils.getInternalError(error.message));
         }
       });
     }
   );
 
   route.delete(
-    '/-/npm/v1/tokens/token/:tokenKey',
+    TOKEN_API_ENDPOINTS.delete_token,
+    rateLimit(config?.userRateLimit),
     async (req: $RequestExtend, res: Response, next: $NextFunctionVer) => {
       const {
         params: { tokenKey },
@@ -138,12 +146,12 @@ export default function (
           await storage.deleteToken(name, tokenKey);
           logger.info({ tokenKey, name }, 'token id @{tokenKey} was revoked for user @{name}');
           return next({});
-        } catch (error) {
+        } catch (error: any) {
           logger.error({ error: error.msg }, 'token creation has failed: @{error}');
-          return next(ErrorCode.getCode(HTTP_STATUS.INTERNAL_ERROR, error.message));
+          return next(errorUtils.getCode(HTTP_STATUS.INTERNAL_ERROR, error.message));
         }
       }
-      return next(ErrorCode.getUnauthorized());
+      return next(errorUtils.getUnauthorized());
     }
   );
 }

@@ -1,40 +1,59 @@
-import _ from 'lodash';
 import buildDebug from 'debug';
-import { Router, Response, Request } from 'express';
+import { Request, Response, Router } from 'express';
+import _ from 'lodash';
 
-import { Config, RemoteUser, JWTSignOptions } from '@verdaccio/types';
+import { Auth } from '@verdaccio/auth';
+import {
+  API_ERROR,
+  APP_ERROR,
+  HEADERS,
+  HTTP_STATUS,
+  VerdaccioError,
+  errorUtils,
+  validatioUtils,
+} from '@verdaccio/core';
+import { rateLimit } from '@verdaccio/middleware';
+import { WebUrls } from '@verdaccio/middleware';
+import { Config, JWTSignOptions, RemoteUser } from '@verdaccio/types';
 
-import { API_ERROR, APP_ERROR, HTTP_STATUS } from '@verdaccio/commons-api';
-import { IAuth } from '@verdaccio/auth';
-import { validatePassword, ErrorCode } from '@verdaccio/utils';
 import { $NextFunctionVer } from './package';
 
 const debug = buildDebug('verdaccio:web:api:user');
 
-function addUserAuthApi(route: Router, auth: IAuth, config: Config): void {
-  route.post('/login', function (req: Request, res: Response, next: $NextFunctionVer): void {
-    const { username, password } = req.body;
-    debug('authenticate %o', username);
-    auth.authenticate(username, password, async (err, user: RemoteUser): Promise<void> => {
-      if (err) {
-        const errorCode = err.message ? HTTP_STATUS.UNAUTHORIZED : HTTP_STATUS.INTERNAL_ERROR;
-        debug('error authenticate %o', errorCode);
-        next(ErrorCode.getCode(errorCode, err.message));
-      } else {
-        req.remote_user = user;
-        const jWTSignOptions: JWTSignOptions = config.security.web.sign;
-
-        next({
-          token: await auth.jwtEncrypt(user, jWTSignOptions),
-          username: req.remote_user.name,
-        });
-      }
-    });
-  });
+function addUserAuthApi(auth: Auth, config: Config): Router {
+  const route = Router(); /* eslint new-cap: 0 */
+  route.post(
+    WebUrls.user_login,
+    rateLimit(config?.userRateLimit),
+    function (req: Request, res: Response, next: $NextFunctionVer): void {
+      const { username, password } = req.body;
+      debug('authenticate %o', username);
+      auth.authenticate(
+        username,
+        password,
+        async (err: VerdaccioError | null, user?: RemoteUser): Promise<void> => {
+          if (err) {
+            const errorCode = err.message ? HTTP_STATUS.UNAUTHORIZED : HTTP_STATUS.INTERNAL_ERROR;
+            debug('error authenticate %o', errorCode);
+            next(errorUtils.getCode(errorCode, err.message));
+          } else {
+            req.remote_user = user as RemoteUser;
+            const jWTSignOptions: JWTSignOptions = config.security.web.sign;
+            res.set(HEADERS.CACHE_CONTROL, 'no-cache, no-store');
+            next({
+              token: await auth.jwtEncrypt(user as RemoteUser, jWTSignOptions),
+              username: req.remote_user.name,
+            });
+          }
+        }
+      );
+    }
+  );
 
   if (config?.flags?.changePassword === true) {
     route.put(
-      '/reset_password',
+      WebUrls.reset_password,
+      rateLimit(config?.userRateLimit),
       function (req: Request, res: Response, next: $NextFunctionVer): void {
         if (_.isNil(req.remote_user.name)) {
           res.status(HTTP_STATUS.UNAUTHORIZED);
@@ -47,27 +66,29 @@ function addUserAuthApi(route: Router, auth: IAuth, config: Config): void {
         const { password } = req.body;
         const { name } = req.remote_user;
 
-        if (validatePassword(password.new) === false) {
-          auth.changePassword(
-            name as string,
-            password.old,
+        if (
+          validatioUtils.validatePassword(
             password.new,
-            (err, isUpdated): void => {
-              if (_.isNil(err) && isUpdated) {
-                next({
-                  ok: true,
-                });
-              } else {
-                return next(ErrorCode.getInternalError(API_ERROR.INTERNAL_SERVER_ERROR));
-              }
-            }
-          );
-        } else {
-          return next(ErrorCode.getCode(HTTP_STATUS.BAD_REQUEST, APP_ERROR.PASSWORD_VALIDATION));
+            config?.serverSettings?.passwordValidationRegex
+          ) === false
+        ) {
+          return next(errorUtils.getCode(HTTP_STATUS.BAD_REQUEST, APP_ERROR.PASSWORD_VALIDATION));
         }
+
+        auth.changePassword(name as string, password.old, password.new, (err, isUpdated): void => {
+          if (_.isNil(err) && isUpdated) {
+            next({
+              ok: true,
+            });
+          } else {
+            return next(errorUtils.getInternalError(API_ERROR.INTERNAL_SERVER_ERROR));
+          }
+        });
       }
     );
   }
+
+  return route;
 }
 
 export default addUserAuthApi;

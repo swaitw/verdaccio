@@ -1,8 +1,10 @@
 import { Command, Option } from 'clipanion';
+
 import { findConfigFile, parseConfigFile } from '@verdaccio/config';
-import { setup, logger } from '@verdaccio/logger';
+import { warningUtils } from '@verdaccio/core';
+import { logger, setup } from '@verdaccio/logger';
 import { initServer } from '@verdaccio/node-api';
-import { ConfigRuntime } from '@verdaccio/types';
+import { ConfigYaml, LoggerConfigItem } from '@verdaccio/types';
 
 export const DEFAULT_PROCESS_NAME: string = 'verdaccio';
 
@@ -43,16 +45,12 @@ export class InitCommand extends Command {
     description: 'use this configuration file (default: ./config.yaml)',
   });
 
-  private initLogger(logConfig: ConfigRuntime) {
-    try {
-      if (logConfig.logs) {
-        process.emitWarning('config.logs is deprecated, rename configuration to "config.log"');
-      }
-      // FUTURE: remove fallback when is ready
-      setup(logConfig.log || logConfig.logs);
-    } catch {
-      throw new Error('error on init logger');
+  private initLogger(logConfig: ConfigYaml) {
+    if (logConfig.logs) {
+      logConfig.log = logConfig.logs;
+      warningUtils.emit(warningUtils.Codes.VERWAR002);
     }
+    setup(logConfig.log as LoggerConfigItem);
   }
 
   public async execute() {
@@ -60,6 +58,7 @@ export class InitCommand extends Command {
       const configPathLocation = findConfigFile(this.config as string);
       const configParsed = parseConfigFile(configPathLocation);
       this.initLogger(configParsed);
+      logger.info({ file: configPathLocation }, 'using config file: @{file}');
       const { web } = configParsed;
 
       process.title = web?.title || DEFAULT_PROCESS_NAME;
@@ -67,8 +66,11 @@ export class InitCommand extends Command {
       const { version, name } = require('../../package.json');
 
       await initServer(configParsed, this.port as string, version, name);
+
+      const logLevel = configParsed.log?.level || 'default';
+      logger.info({ logLevel }, 'log level: @{logLevel}');
       logger.info('server started');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
       process.exit(1);
     }

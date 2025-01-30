@@ -1,23 +1,23 @@
-import React, { useContext } from 'react';
+import React from 'react';
+import { useSelector } from 'react-redux';
 
-import Loading from 'verdaccio-ui/components/Loading';
-import NotFound from 'verdaccio-ui/components/NotFound';
-
-import { DetailContext } from './context';
-import VersionLayout from './VersionLayout';
+import { Forbidden, Loading, NotFound, RootState, VersionLayout } from '@verdaccio/ui-components';
 
 const Version: React.FC = () => {
-  const detailContext = useContext(DetailContext);
-  const { isLoading, hasNotBeenFound } = detailContext;
+  const manifestStore = useSelector((state: RootState) => state.manifest);
+  const isLoading = useSelector((state: RootState) => state?.loading?.models.manifest);
 
   if (isLoading) {
     return <Loading />;
   }
 
-  if (hasNotBeenFound) {
-    return <NotFound />;
+  if (manifestStore.forbidden) {
+    return <Forbidden />;
   }
 
+  if (manifestStore.hasNotBeenFound) {
+    return <NotFound />;
+  }
   return <VersionLayout />;
 };
 

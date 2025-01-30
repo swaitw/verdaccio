@@ -1,40 +1,18 @@
 import path from 'path';
 import supertest from 'supertest';
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
+
+import { HEADERS, HEADER_TYPE, HTTP_STATUS } from '@verdaccio/core';
 import { setup } from '@verdaccio/logger';
-import { IGetPackageOptions } from '@verdaccio/store';
-import { HEADERS, HEADER_TYPE, HTTP_STATUS } from '@verdaccio/commons-api';
+import { publishVersion } from '@verdaccio/test-helper';
 
 import { NOT_README_FOUND } from '../src/api/readme';
 import { initializeServer } from './helper';
 
-setup([]);
+setup({});
 
-const mockManifest = jest.fn();
-jest.mock('@verdaccio/ui-theme', () => mockManifest());
-
-jest.mock('@verdaccio/store', () => ({
-  Storage: class {
-    public init() {
-      return Promise.resolve();
-    }
-    public getPackage({ name, callback }: IGetPackageOptions) {
-      callback(null, {
-        name,
-        ['dist-tags']: {
-          latest: '1.0.0',
-        },
-        versions: {
-          ['1.0.0']: {
-            name,
-          },
-        },
-      });
-    }
-  },
-  SearchInstance: {
-    configureStorage: () => {},
-  },
-}));
+const mockManifest = vi.fn();
+vi.mock('@verdaccio/ui-theme', () => mockManifest());
 
 describe('readme api', () => {
   beforeAll(() => {
@@ -48,13 +26,26 @@ describe('readme api', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockManifest.mockClear();
   });
 
   test('should fetch readme scoped package', async () => {
-    const response = await supertest(await initializeServer('default-test.yaml'))
-      .get('/-/verdaccio/package/readme/@scope/pk1-test')
+    const app = await initializeServer('default-test.yaml');
+    await publishVersion(app, '@scope/pk1-test', '1.0.0', { readme: 'my readme scoped' });
+    const response = await supertest(app)
+      .get('/-/verdaccio/data/package/readme/@scope/pk1-test')
+      .set('Accept', HEADERS.TEXT_PLAIN)
+      .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.TEXT_PLAIN_UTF8)
+      .expect(HTTP_STATUS.OK);
+    expect(response.text).toMatch('my readme scoped');
+  }, 70000);
+
+  test('should fetch readme scoped package with not found message', async () => {
+    const app = await initializeServer('default-test.yaml');
+    await publishVersion(app, '@scope/pk1-test', '1.0.0', { readme: null });
+    const response = await supertest(app)
+      .get('/-/verdaccio/data/package/readme/@scope/pk1-test')
       .set('Accept', HEADERS.TEXT_PLAIN)
       .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.TEXT_PLAIN_UTF8)
       .expect(HTTP_STATUS.OK);
@@ -62,11 +53,53 @@ describe('readme api', () => {
   });
 
   test('should fetch readme a package', async () => {
-    const response = await supertest(await initializeServer('default-test.yaml'))
-      .get('/-/verdaccio/package/readme/pk1-test')
+    const app = await initializeServer('default-test.yaml');
+    await publishVersion(app, 'pk1-test', '1.0.0', { readme: 'my readme' });
+    const response = await supertest(app)
+      .get('/-/verdaccio/data/package/readme/pk1-test')
+      .set('Accept', HEADERS.TEXT_PLAIN)
+      .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.TEXT_PLAIN_UTF8)
+      .expect(HTTP_STATUS.OK);
+    expect(response.text).toMatch('my readme');
+  });
+
+  test('should fetch readme a package with not found message', async () => {
+    const app = await initializeServer('default-test.yaml');
+    await publishVersion(app, 'pk1-test', '1.0.0', { readme: null });
+    const response = await supertest(app)
+      .get('/-/verdaccio/data/package/readme/pk1-test')
       .set('Accept', HEADERS.TEXT_PLAIN)
       .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.TEXT_PLAIN_UTF8)
       .expect(HTTP_STATUS.OK);
     expect(response.text).toMatch(NOT_README_FOUND);
+  });
+
+  test('should fetch readme with keeping all readmes (latest)', async () => {
+    const app = await initializeServer('keep-all-readmes.yaml');
+    await publishVersion(app, 'pk1-test', '1.0.0', { readme: 'my readme' });
+    const response = await supertest(app)
+      .get('/-/verdaccio/data/package/readme/pk1-test')
+      .set('Accept', HEADERS.TEXT_PLAIN)
+      .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.TEXT_PLAIN_UTF8)
+      .expect(HTTP_STATUS.OK);
+    expect(response.text).toMatch('my readme');
+  });
+
+  test('should fetch readme with keeping all readmes (version)', async () => {
+    const app = await initializeServer('keep-all-readmes.yaml');
+    await publishVersion(app, 'pk1-test', '1.0.0', { readme: 'my readme' });
+    await publishVersion(app, 'pk1-test', '1.2.0', { readme: 'my new readme' });
+    const response = await supertest(app)
+      .get('/-/verdaccio/data/package/readme/pk1-test')
+      .set('Accept', HEADERS.TEXT_PLAIN)
+      .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.TEXT_PLAIN_UTF8)
+      .expect(HTTP_STATUS.OK);
+    expect(response.text).toMatch('my new readme');
+    const response2 = await supertest(app)
+      .get('/-/verdaccio/data/package/readme/pk1-test?v=1.0.0')
+      .set('Accept', HEADERS.TEXT_PLAIN)
+      .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.TEXT_PLAIN_UTF8)
+      .expect(HTTP_STATUS.OK);
+    expect(response2.text).toMatch('my readme');
   });
 });

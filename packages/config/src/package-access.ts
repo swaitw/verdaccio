@@ -1,15 +1,17 @@
 import assert from 'assert';
+import buildDebug from 'debug';
 import _ from 'lodash';
-import minimatch from 'minimatch';
 
-import { PackageList, PackageAccess } from '@verdaccio/types';
-import { ErrorCode } from '@verdaccio/utils';
-import { MatchedPackage } from './config';
+import { errorUtils } from '@verdaccio/core';
+import { PackageAccess } from '@verdaccio/types';
+
+const debug = buildDebug('verdaccio:config:utils');
 
 export interface LegacyPackageList {
   [key: string]: PackageAccess;
 }
 
+// @deprecated use @verdaccio/core:authUtils
 export const ROLES = {
   $ALL: '$all',
   ALL: 'all',
@@ -20,6 +22,7 @@ export const ROLES = {
   DEPRECATED_ANONYMOUS: '@anonymous',
 };
 
+// @deprecated use @verdaccio/core:authUtils
 export const PACKAGE_ACCESS = {
   SCOPE: '@*/*',
   ALL: '**',
@@ -27,7 +30,7 @@ export const PACKAGE_ACCESS = {
 
 export function normalizeUserList(groupsList: any): any {
   const result: any[] = [];
-  if (_.isNil(groupsList)) {
+  if (_.isNil(groupsList) || _.isEmpty(groupsList)) {
     return result;
   }
 
@@ -39,21 +42,12 @@ export function normalizeUserList(groupsList: any): any {
   } else if (Array.isArray(groupsList)) {
     result.push(groupsList);
   } else {
-    throw ErrorCode.getInternalError(
+    throw errorUtils.getInternalError(
       'CONFIG: bad package acl (array or string expected): ' + JSON.stringify(groupsList)
     );
   }
 
   return _.flatten(result);
-}
-
-export function getMatchedPackagesSpec(pkgName: string, packages: PackageList): MatchedPackage {
-  for (const i in packages) {
-    if (minimatch.makeRe(i).exec(pkgName)) {
-      return packages[i];
-    }
-  }
-  return;
 }
 
 export function normalisePackageAccess(packages: LegacyPackageList): LegacyPackageList {
@@ -70,6 +64,7 @@ export function normalisePackageAccess(packages: LegacyPackageList): LegacyPacka
   for (const pkg in packages) {
     if (Object.prototype.hasOwnProperty.call(packages, pkg)) {
       const packageAccess = packages[pkg];
+      debug('package access %s for %s ', packageAccess, pkg);
       const isInvalid = _.isObject(packageAccess) && _.isArray(packageAccess) === false;
       assert(isInvalid, `CONFIG: bad "'${pkg}'" package description (object expected)`);
 

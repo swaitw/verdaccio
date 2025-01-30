@@ -1,6 +1,6 @@
 {
   "name": "verdaccio-aws-s3-storage",
-  "version": "11.0.0-6-next.5",
+  "version": "11.0.0-6-next.10",
   "description": "AWS S3 storage implementation for Verdaccio",
   "keywords": [
     "private",
@@ -14,8 +14,7 @@
     "verdaccio"
   ],
   "engines": {
-    "node": ">=10",
-    "npm": ">=6"
+    "node": ">=18"
   },
   "author": "Juan Picado <juanpicado19@gmail.com>",
   "license": "MIT",
@@ -31,13 +30,12 @@
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "dependencies": {
-    "@verdaccio/commons-api": "workspace:11.0.0-alpha.3",
-    "@verdaccio/streams": "workspace:11.0.0-alpha.3",
-    "aws-sdk": "^2.607.0"
+    "@verdaccio/core": "workspace:6.0.0-6-next.5",
+    "aws-sdk": "2.1354.0"
   },
   "devDependencies": {
-    "@verdaccio/types": "workspace:11.0.0-6-next.7",
-    "recursive-readdir": "2.2.2"
+    "@verdaccio/types": "workspace:11.0.0-6-next.12",
+    "recursive-readdir": "2.2.3"
   },
   "scripts": {
     "clean": "rimraf ./build",
@@ -45,7 +43,7 @@
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.build.json",
     "build:js": "babel src/ --out-dir build/ --copy-files --extensions \".ts,.tsx\" --source-maps",
     "build": "pnpm run build:js && pnpm run build:types",
-    "test": "cross-env NODE_ENV=test BABEL_ENV=test jest"
+    "test": "vitest run"
   },
   "funding": {
     "type": "opencollective",

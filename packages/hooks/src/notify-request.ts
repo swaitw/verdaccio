@@ -1,17 +1,22 @@
-import fetch, { RequestInit } from 'node-fetch';
 import buildDebug from 'debug';
+import got from 'got-cjs';
 
+import { HTTP_STATUS } from '@verdaccio/core';
 import { logger } from '@verdaccio/logger';
-import { HTTP_STATUS } from '@verdaccio/commons-api';
 
 const debug = buildDebug('verdaccio:hooks:request');
-export type NotifyRequestOptions = RequestInit;
 
-export async function notifyRequest(url: string, options: NotifyRequestOptions): Promise<boolean> {
+export type FetchOptions = {
+  body: string;
+  headers?: {};
+  method?: string;
+};
+
+export async function notifyRequest(url: string, options: FetchOptions): Promise<boolean> {
   let response;
   try {
     debug('uri %o', url);
-    response = await fetch(url, {
+    response = got.post(url, {
       body: JSON.stringify(options.body),
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -27,7 +32,7 @@ export async function notifyRequest(url: string, options: NotifyRequestOptions):
       'The notification @{content} has been successfully dispatched'
     );
     return true;
-  } catch (err) {
+  } catch (err: any) {
     debug('request error %o', err);
     logger.error(
       { errorMessage: err?.message },

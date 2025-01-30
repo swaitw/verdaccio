@@ -1,44 +1,17 @@
 import path from 'path';
 import supertest from 'supertest';
-import { IGetPackageOptions } from '@verdaccio/store';
-import { setup } from '@verdaccio/logger';
+import { afterEach, beforeAll, describe, expect, test, vi } from 'vitest';
 
-import { HEADERS, HEADER_TYPE, HTTP_STATUS } from '@verdaccio/commons-api';
+import { HEADERS, HEADER_TYPE, HTTP_STATUS } from '@verdaccio/core';
+import { setup } from '@verdaccio/logger';
+import { publishVersion } from '@verdaccio/test-helper';
+
 import { initializeServer } from './helper';
 
-setup([]);
+setup({});
 
-const mockManifest = jest.fn();
-const mockQuery = jest.fn(() => [
-  { ref: 'pkg1', score: 1 },
-  { ref: 'pk2', score: 0.9 },
-]);
-jest.mock('@verdaccio/ui-theme', () => mockManifest());
-
-jest.mock('@verdaccio/store', () => ({
-  Storage: class {
-    public init() {
-      return Promise.resolve();
-    }
-    public getPackage({ name, callback }: IGetPackageOptions) {
-      callback(null, {
-        name,
-        ['dist-tags']: {
-          latest: '1.0.0',
-        },
-        versions: {
-          ['1.0.0']: {
-            name,
-          },
-        },
-      });
-    }
-  },
-  SearchInstance: {
-    configureStorage: () => {},
-    query: () => mockQuery(),
-  },
-}));
+const mockManifest = vi.fn();
+vi.mock('@verdaccio/ui-theme', () => mockManifest());
 
 describe('test web server', () => {
   beforeAll(() => {
@@ -52,42 +25,44 @@ describe('test web server', () => {
   });
 
   afterEach(() => {
-    jest.clearAllMocks();
+    Date.now = vi.fn(() => new Date(Date.UTC(2017, 1, 14)).valueOf());
+    vi.clearAllMocks();
     mockManifest.mockClear();
   });
 
-  test('should OK to search api', async () => {
-    const response = await supertest(await initializeServer('default-test.yaml'))
-      .get('/-/verdaccio/search/keyword')
+  test('should find results to search api', async () => {
+    const app = await initializeServer('default-test.yaml');
+    await publishVersion(app, 'foo', '1.0.0');
+    const response = await supertest(app)
+      .get('/-/verdaccio/data/search/foo')
       .set('Accept', HEADERS.JSON_CHARSET)
       .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.JSON_CHARSET)
       .expect(HTTP_STATUS.OK);
-    expect(response.body).toHaveLength(2);
+    expect(response.body).toHaveLength(1);
+    // FUTURE: we can improve here matching the right outcome
   });
 
-  test('should 404 to search api', async () => {
-    mockQuery.mockReturnValue([]);
+  test('should found no results to search', async () => {
     const response = await supertest(await initializeServer('default-test.yaml'))
-      .get('/-/verdaccio/search/notFound')
+      .get('/-/verdaccio/data/search/notFound')
       .set('Accept', HEADERS.JSON_CHARSET)
       .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.JSON_CHARSET)
       .expect(HTTP_STATUS.OK);
     expect(response.body).toHaveLength(0);
   });
 
-  test('should fail search api', async () => {
-    mockQuery.mockImplementation(() => {
-      return [
-        { ref: 'aa', score: 1 },
-        { ref: 'bb', score: 0.8 },
-        { ref: 'cc', score: 0.6 },
-      ];
-    });
+  // TODO: need a way to make this fail
+  test.skip('should fail search api', async () => {
     const response = await supertest(await initializeServer('default-test.yaml'))
-      .get('/-/verdaccio/search/notFound')
+      .get('/-/verdaccio/data/search/thisWillFail')
       .set('Accept', HEADERS.JSON_CHARSET)
       .expect(HEADER_TYPE.CONTENT_TYPE, HEADERS.JSON_CHARSET)
       .expect(HTTP_STATUS.OK);
     expect(response.body).toHaveLength(3);
   });
+
+  test.todo('search abort request');
+  // maybe these could be done in storage package to avoid have specifics on this level
+  test.todo('search allow request permissions');
+  test.todo('search query params, pagination etc');
 });

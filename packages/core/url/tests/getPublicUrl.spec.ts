@@ -1,6 +1,8 @@
 import * as httpMocks from 'node-mocks-http';
+import { describe, expect, test } from 'vitest';
 
-import { HEADERS } from '@verdaccio/commons-api';
+import { HEADERS } from '@verdaccio/core';
+
 import { getPublicUrl } from '../src';
 
 describe('host', () => {
@@ -11,7 +13,13 @@ describe('host', () => {
       method: 'GET',
       url: '/',
     });
-    expect(getPublicUrl(undefined, req)).toEqual('/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('/');
   });
 
   test('get a valid host', () => {
@@ -22,7 +30,13 @@ describe('host', () => {
       },
       url: '/',
     });
-    expect(getPublicUrl(undefined, req)).toEqual('http://some.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some.com/');
   });
 
   test('check a valid host header injection', () => {
@@ -31,11 +45,15 @@ describe('host', () => {
       headers: {
         host: `some.com"><svg onload="alert(1)">`,
       },
+      hostname: `some.com"><svg onload="alert(1)">`,
       url: '/',
     });
     expect(function () {
-      // @ts-expect-error
-      getPublicUrl({}, req);
+      getPublicUrl('', {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      });
     }).toThrow('invalid host');
   });
 
@@ -48,7 +66,13 @@ describe('host', () => {
       url: '/',
     });
 
-    expect(getPublicUrl('/prefix/', req)).toEqual('http://some.com/prefix/');
+    expect(
+      getPublicUrl('/prefix/', {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some.com/prefix/');
   });
 
   test('get a valid host with prefix no trailing', () => {
@@ -60,7 +84,13 @@ describe('host', () => {
       url: '/',
     });
 
-    expect(getPublicUrl('/prefix-no-trailing', req)).toEqual('http://some.com/prefix-no-trailing/');
+    expect(
+      getPublicUrl('/prefix-no-trailing', {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some.com/prefix-no-trailing/');
   });
 
   test('get a valid host with null prefix', () => {
@@ -72,7 +102,13 @@ describe('host', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(null, req)).toEqual('http://some.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some.com/');
   });
 });
 
@@ -87,7 +123,13 @@ describe('X-Forwarded-Proto', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('https://some.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('https://some.com/');
   });
 
   test('with a invalid X-Forwarded-Proto https', () => {
@@ -100,7 +142,13 @@ describe('X-Forwarded-Proto', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('http://some.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some.com/');
   });
 
   test('with a HAProxy X-Forwarded-Proto https', () => {
@@ -113,7 +161,13 @@ describe('X-Forwarded-Proto', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('https://some.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('https://some.com/');
   });
 
   test('with a HAProxy X-Forwarded-Proto different protocol', () => {
@@ -126,7 +180,13 @@ describe('X-Forwarded-Proto', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('http://some.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some.com/');
   });
 });
 
@@ -142,7 +202,13 @@ describe('env variable', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('https://env.domain.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('https://env.domain.com/');
     delete process.env.VERDACCIO_PUBLIC_URL;
   });
 
@@ -157,7 +223,13 @@ describe('env variable', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('https://env.domain.com/urlPrefix/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('https://env.domain.com/urlPrefix/');
     delete process.env.VERDACCIO_PUBLIC_URL;
   });
 
@@ -172,7 +244,13 @@ describe('env variable', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('https://env.domain.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('https://env.domain.com/');
     delete process.env.VERDACCIO_PUBLIC_URL;
   });
 
@@ -187,7 +265,13 @@ describe('env variable', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('http://some.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some.com/');
     delete process.env.VERDACCIO_PUBLIC_URL;
   });
 
@@ -202,8 +286,60 @@ describe('env variable', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('http://some.com/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some.com/');
     delete process.env.VERDACCIO_PUBLIC_URL;
+  });
+
+  test('with the VERDACCIO_FORWARDED_PROTO undefined', () => {
+    process.env.VERDACCIO_FORWARDED_PROTO = undefined;
+    const req = httpMocks.createRequest({
+      method: 'GET',
+      headers: {
+        host: 'some.com',
+        [HEADERS.FORWARDED_PROTO]: 'https',
+      },
+      url: '/',
+    });
+
+    expect(
+      getPublicUrl('/test/', {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some.com/test/');
+    delete process.env.VERDACCIO_FORWARDED_PROTO;
+  });
+
+  test('with the VERDACCIO_FORWARDED_PROTO environment variable set to "set-cookie"', () => {
+    process.env.VERDACCIO_FORWARDED_PROTO = 'set-cookie';
+    const req = httpMocks.createRequest({
+      method: 'GET',
+      headers: {
+        host: 'some.com',
+        cookie: 'name=value; name2=value2;',
+        'set-cookie': [
+          'cookieName1=value; expires=Tue, 19 Jan 2038 03:14:07 GMT;',
+          'cookieName2=value; expires=Tue, 19 Jan 2038 03:14:07 GMT;',
+        ],
+      },
+      url: '/',
+    });
+
+    expect(() =>
+      getPublicUrl('/test/', {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toThrow('invalid forwarded protocol header value. Reading header set-cookie');
+    delete process.env.VERDACCIO_FORWARDED_PROTO;
   });
 
   test('with a invalid X-Forwarded-Proto https and host injection with invalid host', () => {
@@ -217,7 +353,13 @@ describe('env variable', () => {
       url: '/',
     });
 
-    expect(getPublicUrl(undefined, req)).toEqual('http://some/');
+    expect(
+      getPublicUrl(undefined, {
+        host: req.hostname,
+        headers: req.headers as any,
+        protocol: req.protocol,
+      })
+    ).toEqual('http://some/');
     delete process.env.VERDACCIO_PUBLIC_URL;
   });
 });

@@ -27,7 +27,7 @@ const prodConf = {
   devtool: 'inline-cheap-module-source-map',
 
   entry: {
-    main: ['@babel/polyfill', 'whatwg-fetch', `${env.SRC_ROOT}/index.tsx`],
+    main: ['whatwg-fetch', `${env.SRC_ROOT}/index.tsx`],
   },
 
   module: {
@@ -56,7 +56,6 @@ const prodConf = {
       primary_color: 'ToReplaceByPrimaryColor',
       filename: 'index.html',
       favicon: `${env.SRC_ROOT}/template/favicon.ico`,
-      verdaccioURL: 'ToReplaceByVerdaccio',
       version_app: 'ToReplaceByVersion',
       template: `${env.SRC_ROOT}/template/index.html`,
       debug: false,

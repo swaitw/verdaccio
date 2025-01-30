@@ -1,14 +1,19 @@
-import path from 'path';
 import _ from 'lodash';
+import path from 'path';
+import { describe, expect, test } from 'vitest';
 
 import {
   Config,
   DEFAULT_REGISTRY,
   DEFAULT_UPLINK,
-  defaultSecurity,
-  parseConfigFile,
   ROLES,
+  TOKEN_VALID_LENGTH,
   WEB_TITLE,
+  defaultSecurity,
+  generateRandomSecretKey,
+  getDefaultConfig,
+  isNodeVersionGreaterThan21,
+  parseConfigFile,
 } from '../src';
 import { parseConfigurationFile } from './utils';
 
@@ -17,6 +22,8 @@ const resolveConf = (conf) => {
 
   return path.join(__dirname, `../src/conf/${name}${ext.startsWith('.') ? ext : '.yaml'}`);
 };
+
+const itif = (condition) => (condition ? test : test.skip);
 
 const checkDefaultUplink = (config) => {
   expect(_.isObject(config.uplinks[DEFAULT_UPLINK])).toBeTruthy();
@@ -57,11 +64,11 @@ describe('check basic content parsed file', () => {
     expect(config.middlewares).toBeDefined();
     expect(config.middlewares.audit).toBeDefined();
     expect(config.middlewares.audit.enabled).toBeTruthy();
-    // logs
-    expect(config.logs).toBeDefined();
-    expect(config.logs.type).toEqual('stdout');
-    expect(config.logs.format).toEqual('pretty');
-    expect(config.logs.level).toEqual('http');
+    // log
+    expect(config.log).toBeDefined();
+    expect(config.log.type).toEqual('stdout');
+    expect(config.log.format).toEqual('pretty');
+    expect(config.log.level).toEqual('http');
     // must not be enabled by default
     expect(config.notify).toBeUndefined();
     expect(config.store).toBeUndefined();
@@ -74,7 +81,7 @@ describe('check basic content parsed file', () => {
   };
 
   test('parse default.yaml', () => {
-    const config = new Config(parseConfigFile(resolveConf('default')));
+    const config = new Config(getDefaultConfig());
     checkDefaultUplink(config);
     expect(config.storage).toBe('./storage');
     expect(config.auth.htpasswd.file).toBe('./htpasswd');
@@ -82,7 +89,7 @@ describe('check basic content parsed file', () => {
   });
 
   test('parse docker.yaml', () => {
-    const config = new Config(parseConfigFile(resolveConf('docker')));
+    const config = new Config(getDefaultConfig('docker.yaml'));
     checkDefaultUplink(config);
     expect(config.storage).toBe('/verdaccio/storage/data');
     expect(config.auth.htpasswd.file).toBe('/verdaccio/storage/htpasswd');
@@ -93,18 +100,85 @@ describe('check basic content parsed file', () => {
 describe('checkSecretKey', () => {
   test('with default.yaml and pre selected secret', () => {
     const config = new Config(parseConfigFile(resolveConf('default')));
-    expect(config.checkSecretKey('12345')).toEqual('12345');
+    expect(config.checkSecretKey(generateRandomSecretKey())).toHaveLength(TOKEN_VALID_LENGTH);
   });
 
   test('with default.yaml and void secret', () => {
     const config = new Config(parseConfigFile(resolveConf('default')));
-    expect(typeof config.checkSecretKey() === 'string').toBeTruthy();
+    const secret = config.checkSecretKey();
+    expect(typeof secret === 'string').toBeTruthy();
+    expect(secret).toHaveLength(TOKEN_VALID_LENGTH);
   });
 
-  test('with default.yaml and emtpy string secret', () => {
+  test('with default.yaml and empty string secret', () => {
     const config = new Config(parseConfigFile(resolveConf('default')));
-    expect(typeof config.checkSecretKey('') === 'string').toBeTruthy();
+    const secret = config.checkSecretKey('');
+    expect(typeof secret === 'string').toBeTruthy();
+    expect(secret).toHaveLength(TOKEN_VALID_LENGTH);
   });
+
+  test('with default.yaml and valid string secret length', () => {
+    const config = new Config(parseConfigFile(resolveConf('default')));
+    expect(typeof config.checkSecretKey(generateRandomSecretKey()) === 'string').toBeTruthy();
+  });
+
+  test('with default.yaml migrate a valid string secret length', () => {
+    const config = new Config(parseConfigFile(resolveConf('default')), {
+      forceMigrateToSecureLegacySignature: true,
+    });
+    expect(
+      // 64 characters secret long
+      config.checkSecretKey('b4982dbb0108531fafb552374d7e83724b6458a2b3ffa97ad0edb899bdaefc4a')
+    ).toHaveLength(TOKEN_VALID_LENGTH);
+  });
+
+  // only runs on Node.js 22 or higher
+  itif(isNodeVersionGreaterThan21())('with enhanced legacy signature Node 22 or higher', () => {
+    const config = new Config(parseConfigFile(resolveConf('default')), {
+      forceMigrateToSecureLegacySignature: false,
+    });
+    // eslint-disable-next-line jest/no-standalone-expect
+    expect(() =>
+      // 64 characters secret long
+      config.checkSecretKey('b4982dbb0108531fafb552374d7e83724b6458a2b3ffa97ad0edb899bdaefc4a')
+    ).toThrow();
+  });
+
+  itif(isNodeVersionGreaterThan21())('with enhanced legacy signature Node 22 or higher', () => {
+    const config = new Config(parseConfigFile(resolveConf('default')), {
+      forceMigrateToSecureLegacySignature: false,
+    });
+    config.security.api.migrateToSecureLegacySignature = true;
+    // eslint-disable-next-line jest/no-standalone-expect
+    expect(
+      config.checkSecretKey('b4982dbb0108531fafb552374d7e83724b6458a2b3ffa97ad0edb899bdaefc4a')
+    ).toHaveLength(TOKEN_VALID_LENGTH);
+  });
+
+  itif(isNodeVersionGreaterThan21() === false)(
+    'with old unsecure legacy signature Node 21 or lower',
+    () => {
+      const config = new Config(parseConfigFile(resolveConf('default')));
+      config.security.api.migrateToSecureLegacySignature = false;
+      // 64 characters secret long
+      // eslint-disable-next-line jest/no-standalone-expect
+      expect(
+        config.checkSecretKey('b4982dbb0108531fafb552374d7e83724b6458a2b3ffa97ad0edb899bdaefc4a')
+      ).toHaveLength(64);
+    }
+  );
+
+  test('with migration to new legacy signature Node 21 or lower', () => {
+    const config = new Config(parseConfigFile(resolveConf('default')));
+    config.security.api.migrateToSecureLegacySignature = true;
+    // 64 characters secret long
+    // eslint-disable-next-line jest/no-standalone-expect
+    expect(
+      config.checkSecretKey('b4982dbb0108531fafb552374d7e83724b6458a2b3ffa97ad0edb899bdaefc4a')
+    ).toHaveLength(TOKEN_VALID_LENGTH);
+  });
+
+  test.todo('test emit warning with secret key');
 });
 
 describe('getMatchedPackagesSpec', () => {
@@ -156,5 +230,20 @@ describe('VERDACCIO_STORAGE_PATH', () => {
     const config = new Config(defaultConfig);
     expect(config.storage).toBe(storageLocation);
     delete process.env.VERDACCIO_STORAGE_PATH;
+  });
+});
+
+describe('configPath', () => {
+  test('should set configPath in config', () => {
+    const defaultConfig = parseConfigFile(resolveConf('default'));
+    const config = new Config(defaultConfig);
+    expect(config.getConfigPath()).toBe(path.join(__dirname, '../src/conf/default.yaml'));
+  });
+
+  test('should throw an error if configPath is not provided', () => {
+    const defaultConfig = parseConfigFile(resolveConf('default'));
+    defaultConfig.configPath = '';
+    defaultConfig.config_path = '';
+    expect(() => new Config(defaultConfig)).toThrow('configPath property is required');
   });
 });
