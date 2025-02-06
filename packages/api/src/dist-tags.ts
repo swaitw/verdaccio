@@ -1,107 +1,106 @@
-import mime from 'mime';
-import _ from 'lodash';
 import { Router } from 'express';
+import _ from 'lodash';
+import mime from 'mime';
 
-import { media, allow } from '@verdaccio/middleware';
-import { API_MESSAGE, HTTP_STATUS, DIST_TAGS, VerdaccioError } from '@verdaccio/commons-api';
-import { Package } from '@verdaccio/types';
-import { IStorageHandler } from '@verdaccio/store';
-import { IAuth } from '@verdaccio/auth';
+import { Auth } from '@verdaccio/auth';
+import { constants, errorUtils } from '@verdaccio/core';
+import { allow, media } from '@verdaccio/middleware';
+import { DIST_TAGS_API_ENDPOINTS } from '@verdaccio/middleware';
+import { Storage } from '@verdaccio/store';
+import { Logger } from '@verdaccio/types';
+
 import { $NextFunctionVer, $RequestExtend, $ResponseExtend } from '../types/custom';
 
-export default function (route: Router, auth: IAuth, storage: IStorageHandler): void {
-  const can = allow(auth);
-  const tag_package_version = function (
+export default function (route: Router, auth: Auth, storage: Storage, logger: Logger): void {
+  const can = allow(auth, {
+    beforeAll: (a, b) => logger.trace(a, b),
+    afterAll: (a, b) => logger.trace(a, b),
+  });
+  const addTagPackageVersionMiddleware = async function (
     req: $RequestExtend,
     res: $ResponseExtend,
     next: $NextFunctionVer
-  ): $NextFunctionVer {
+  ): Promise<$NextFunctionVer> {
     if (_.isString(req.body) === false) {
-      return next('route');
+      return next(errorUtils.getBadRequest('version is missing'));
     }
 
     const tags = {};
     tags[req.params.tag] = req.body;
-    storage.mergeTags(req.params.package, tags, function (err: Error): $NextFunctionVer {
-      if (err) {
-        return next(err);
-      }
-      res.status(HTTP_STATUS.CREATED);
-      return next({ ok: API_MESSAGE.TAG_ADDED });
-    });
+    try {
+      await storage.mergeTagsNext(req.params.package, tags);
+      res.status(constants.HTTP_STATUS.CREATED);
+      return next({
+        ok: constants.API_MESSAGE.TAG_ADDED,
+      });
+    } catch (err) {
+      next(err);
+    }
   };
 
   // tagging a package.
-  route.put('/:package/:tag', can('publish'), media(mime.getType('json')), tag_package_version);
-
-  route.post(
-    '/-/package/:package/dist-tags/:tag',
+  route.put(
+    DIST_TAGS_API_ENDPOINTS.tagging,
     can('publish'),
     media(mime.getType('json')),
-    tag_package_version
+    addTagPackageVersionMiddleware
   );
 
   route.put(
-    '/-/package/:package/dist-tags/:tag',
+    DIST_TAGS_API_ENDPOINTS.tagging_package,
     can('publish'),
     media(mime.getType('json')),
-    tag_package_version
+    addTagPackageVersionMiddleware
   );
 
   route.delete(
-    '/-/package/:package/dist-tags/:tag',
+    DIST_TAGS_API_ENDPOINTS.tagging_package,
     can('publish'),
-    function (req: $RequestExtend, res: $ResponseExtend, next: $NextFunctionVer): void {
+    async function (
+      req: $RequestExtend,
+      res: $ResponseExtend,
+      next: $NextFunctionVer
+    ): Promise<void> {
       const tags = {};
       tags[req.params.tag] = null;
-      storage.mergeTags(req.params.package, tags, function (err: VerdaccioError): $NextFunctionVer {
-        if (err) {
-          return next(err);
-        }
-        res.status(HTTP_STATUS.CREATED);
+      try {
+        await storage.mergeTagsNext(req.params.package, tags);
+        res.status(constants.HTTP_STATUS.CREATED);
         return next({
-          ok: API_MESSAGE.TAG_REMOVED,
+          ok: constants.API_MESSAGE.TAG_REMOVED,
         });
-      });
+      } catch (err) {
+        next(err);
+      }
     }
   );
 
   route.get(
-    '/-/package/:package/dist-tags',
+    DIST_TAGS_API_ENDPOINTS.get_dist_tags,
     can('access'),
-    function (req: $RequestExtend, res: $ResponseExtend, next: $NextFunctionVer): void {
-      storage.getPackage({
-        name: req.params.package,
-        uplinksLook: true,
-        req,
-        callback: function (err: VerdaccioError, info: Package): $NextFunctionVer {
-          if (err) {
-            return next(err);
-          }
-
-          next(info[DIST_TAGS]);
-        },
-      });
-    }
-  );
-
-  route.post(
-    '/-/package/:package/dist-tags',
-    can('publish'),
-    function (req: $RequestExtend, res: $ResponseExtend, next: $NextFunctionVer): void {
-      storage.mergeTags(
-        req.params.package,
-        req.body,
-        function (err: VerdaccioError): $NextFunctionVer {
-          if (err) {
-            return next(err);
-          }
-          res.status(HTTP_STATUS.CREATED);
-          return next({
-            ok: API_MESSAGE.TAG_UPDATED,
-          });
-        }
-      );
+    async function (
+      req: $RequestExtend,
+      res: $ResponseExtend,
+      next: $NextFunctionVer
+    ): Promise<void> {
+      const name = req.params.package;
+      const requestOptions = {
+        protocol: req.protocol,
+        headers: req.headers as any,
+        // FIXME: if we migrate to req.hostname, the port is not longer included.
+        host: req.host,
+        remoteAddress: req.socket.remoteAddress,
+      };
+      try {
+        const manifest = await storage.getPackageByOptions({
+          name,
+          uplinksLook: true,
+          requestOptions,
+        });
+        next(manifest[constants.DIST_TAGS]);
+      } catch (err) {
+        next(err);
+      }
     }
   );
 }

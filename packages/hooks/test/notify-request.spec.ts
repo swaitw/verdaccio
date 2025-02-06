@@ -1,6 +1,10 @@
 import nock from 'nock';
+import { beforeEach, describe, expect, test } from 'vitest';
+
+import { createRemoteUser, parseConfigFile } from '@verdaccio/config';
+import { setup } from '@verdaccio/logger';
 import { Config } from '@verdaccio/types';
-import { parseConfigFile, createRemoteUser } from '@verdaccio/config';
+
 import { notify } from '../src/notify';
 import { parseConfigurationFile } from './__helper';
 
@@ -12,37 +16,27 @@ const singleHeaderNotificationConfig = parseConfigFile(
 );
 const multiNotificationConfig = parseConfigFile(parseConfigurationNotifyFile('multiple.notify'));
 
-const mockInfo = jest.fn();
-jest.mock('@verdaccio/logger', () => ({
-  setup: jest.fn(),
-  logger: {
-    child: jest.fn(),
-    debug: jest.fn(),
-    trace: jest.fn(),
-    warn: jest.fn(),
-    info: () => mockInfo(),
-    error: jest.fn(),
-    fatal: jest.fn(),
-  },
-}));
+setup({});
 
 const domain = 'http://slack-service';
+
+const options = {
+  path: '/foo?auth_token=mySecretToken',
+};
 
 describe('Notifications:: notifyRequest', () => {
   beforeEach(() => {
     nock.cleanAll();
   });
-
   test('when sending a empty notification', async () => {
-    nock(domain).post('/foo?auth_token=mySecretToken').reply(200, { body: 'test' });
+    nock(domain).post(options.path).reply(200, { body: 'test' });
 
     const notificationResponse = await notify({}, {}, createRemoteUser('foo', []), 'bar');
     expect(notificationResponse).toEqual([false]);
   });
 
   test('when sending a single notification', async () => {
-    nock(domain).post('/foo?auth_token=mySecretToken').reply(200, { body: 'test' });
-
+    nock(domain).post(options.path).reply(200, { body: 'test' });
     const notificationResponse = await notify(
       {},
       singleHeaderNotificationConfig,
@@ -53,7 +47,7 @@ describe('Notifications:: notifyRequest', () => {
   });
 
   test('when notification endpoint is missing', async () => {
-    nock(domain).post('/foo?auth_token=mySecretToken').reply(200, { body: 'test' });
+    nock(domain).post(options.path).reply(200, { body: 'test' });
     const name = 'package';
     const config: Partial<Config> = {
       // @ts-ignore
@@ -68,11 +62,19 @@ describe('Notifications:: notifyRequest', () => {
   });
 
   test('when multiple notifications', async () => {
-    nock(domain).post('/foo?auth_token=mySecretToken').reply(200, { body: 'test' });
-    nock(domain).post('/foo?auth_token=mySecretToken').reply(400, {});
     nock(domain)
-      .post('/foo?auth_token=mySecretToken')
+      .post(options.path)
+      .once()
+      .reply(200, { body: 'test' })
+      .post(options.path)
+      .once()
+      .reply(400, {})
+      .post(options.path)
+      .once()
       .reply(500, { message: 'Something bad happened' });
+    // mockClient.intercept(options).reply(200, { body: 'test' });
+    // mockClient.intercept(options).reply(400, {});
+    // mockClient.intercept(options).reply(500, { message: 'Something bad happened' });
 
     const name = 'package';
     const responses = await notify({ name }, multiNotificationConfig, { name: 'foo' }, 'bar');

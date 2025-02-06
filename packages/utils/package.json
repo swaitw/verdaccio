@@ -1,6 +1,6 @@
 {
   "name": "@verdaccio/utils",
-  "version": "6.0.0-6-next.5",
+  "version": "8.1.0-next-8.8",
   "description": "verdaccio utilities",
   "main": "./build/index.js",
   "types": "build/index.d.ts",
@@ -26,19 +26,17 @@
     "verdaccio"
   ],
   "engines": {
-    "node": ">=10",
-    "npm": ">=6"
+    "node": ">=12"
   },
   "dependencies": {
-    "@verdaccio/commons-api": "workspace:11.0.0-alpha.3",
-    "semver": "7.3.2"
-  },
-  "devDependencies": {
-    "lodash": "^4.17.20"
+    "@verdaccio/core": "workspace:8.0.0-next-8.8",
+    "lodash": "4.17.21",
+    "minimatch": "7.4.6",
+    "semver": "7.7.1"
   },
   "scripts": {
     "clean": "rimraf ./build",
-    "test": "cross-env NODE_ENV=test BABEL_ENV=test jest",
+    "test": "cross-env NODE_ENV=test BABEL_ENV=test vitest run",
     "type-check": "tsc --noEmit -p tsconfig.build.json",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.build.json",
     "build:js": "babel src/ --out-dir build/ --copy-files --extensions \".ts,.tsx\" --source-maps",

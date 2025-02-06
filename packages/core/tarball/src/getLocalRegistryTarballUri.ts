@@ -1,15 +1,11 @@
-import URL from 'url';
-import { Request } from 'express';
 import buildDebug from 'debug';
 
+import { tarballUtils } from '@verdaccio/core';
+import { RequestOptions } from '@verdaccio/url';
 import { getPublicUrl } from '@verdaccio/url';
 
-const debug = buildDebug('verdaccio:core:url');
+const debug = buildDebug('verdaccio:core:tarball');
 
-function extractTarballFromUrl(url: string): string {
-  // @ts-ignore
-  return URL.parse(url).pathname.replace(/^.*\//, '');
-}
 /**
  * Filter a tarball url.
  * @param {*} uri
@@ -18,18 +14,18 @@ function extractTarballFromUrl(url: string): string {
 export function getLocalRegistryTarballUri(
   uri: string,
   pkgName: string,
-  req: Request,
+  requestOptions: RequestOptions,
   urlPrefix: string | void
 ): string {
-  const currentHost = req.headers.host;
+  const currentHost = requestOptions?.headers?.host;
 
   if (!currentHost) {
     return uri;
   }
-  const tarballName = extractTarballFromUrl(uri);
+  const tarballName = tarballUtils.extractTarballFromUrl(uri);
   debug('tarball name %o', tarballName);
   // header only set with proxy that setup with HTTPS
-  const domainRegistry = getPublicUrl(urlPrefix || '', req);
+  const domainRegistry = getPublicUrl(urlPrefix || '', requestOptions);
 
   return `${domainRegistry}${pkgName}/-/${tarballName}`;
 }

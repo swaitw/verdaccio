@@ -1,6 +1,6 @@
 {
   "name": "@verdaccio/store",
-  "version": "6.0.0-6-next.10",
+  "version": "8.0.0-next-8.8",
   "description": "loaders logic",
   "main": "./build/index.js",
   "types": "build/index.d.ts",
@@ -26,12 +26,11 @@
     "verdaccio"
   ],
   "engines": {
-    "node": ">=10",
-    "npm": ">=6"
+    "node": ">=18"
   },
   "scripts": {
     "clean": "rimraf ./build",
-    "test": "cross-env NODE_ENV=test BABEL_ENV=test jest",
+    "test": "vitest run",
     "type-check": "tsc --noEmit -p tsconfig.build.json",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.build.json",
     "build:js": "babel src/ --out-dir build/ --copy-files --extensions \".ts,.tsx\" --source-maps",
@@ -39,24 +38,28 @@
     "build": "pnpm run build:js && pnpm run build:types"
   },
   "dependencies": {
-    "@verdaccio/commons-api": "workspace:11.0.0-alpha.3",
-    "@verdaccio/config": "workspace:6.0.0-6-next.7",
-    "@verdaccio/loaders": "workspace:6.0.0-6-next.4",
-    "@verdaccio/local-storage": "workspace:11.0.0-6-next.6",
-    "@verdaccio/logger": "workspace:6.0.0-6-next.4",
-    "@verdaccio/proxy": "workspace:6.0.0-6-next.9",
-    "@verdaccio/streams": "workspace:11.0.0-alpha.3",
-    "@verdaccio/utils": "workspace:6.0.0-6-next.5",
-    "async": "3.1.1",
-    "debug": "^4.1.1",
-    "lodash": "4.17.15",
-    "lunr": "2.3.9",
-    "lunr-mutable-indexes": "^2.3.2",
-    "semver": "7.1.2"
+    "@verdaccio/config": "workspace:8.0.0-next-8.8",
+    "@verdaccio/core": "workspace:8.0.0-next-8.8",
+    "@verdaccio/hooks": "workspace:8.0.0-next-8.8",
+    "@verdaccio/loaders": "workspace:8.0.0-next-8.4",
+    "@verdaccio/local-storage": "workspace:13.0.0-next-8.8",
+    "@verdaccio/logger": "workspace:8.0.0-next-8.8",
+    "@verdaccio/proxy": "workspace:8.0.0-next-8.8",
+    "@verdaccio/search": "workspace:8.0.0-next-8.8",
+    "@verdaccio/tarball": "workspace:13.0.0-next-8.8",
+    "@verdaccio/url": "workspace:13.0.0-next-8.8",
+    "@verdaccio/utils": "workspace:8.1.0-next-8.8",
+    "JSONStream": "1.3.5",
+    "debug": "4.4.0",
+    "lodash": "4.17.21",
+    "merge2": "1.4.1",
+    "semver": "7.7.1"
   },
   "devDependencies": {
-    "@verdaccio/mock": "workspace:6.0.0-6-next.7",
-    "@verdaccio/types": "workspace:11.0.0-6-next.7"
+    "@verdaccio/test-helper": "workspace:4.0.0-next-8.3",
+    "@verdaccio/types": "workspace:13.0.0-next-8.3",
+    "mockdate": "3.0.5",
+    "node-mocks-http": "1.14.1"
   },
   "funding": {
     "type": "opencollective",

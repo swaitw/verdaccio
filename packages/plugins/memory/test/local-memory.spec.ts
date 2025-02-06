@@ -1,72 +1,78 @@
-import { Logger, IPluginStorage } from '@verdaccio/types';
-import { VerdaccioError } from '@verdaccio/commons-api';
+import { join } from 'path';
+import { describe, expect, test } from 'vitest';
 
+import { Config, parseConfigFile } from '@verdaccio/config';
+import { pluginUtils } from '@verdaccio/core';
+import { logger, setup } from '@verdaccio/logger';
+
+import LocalMemory from '../src/index';
 import { ConfigMemory } from '../src/local-memory';
 import { DataHandler } from '../src/memory-handler';
-import LocalMemory from '../src/index';
 
-import config from './partials/config';
+setup({});
 
-const logger: Logger = {
-  error: (e) => console.warn(e),
-  info: (e) => console.warn(e),
-  debug: (e) => console.warn(e),
-  child: (e) => console.warn(e),
-  warn: (e) => console.warn(e),
-  http: (e) => console.warn(e),
-  trace: (e) => console.warn(e),
-};
+const config = new Config(parseConfigFile(join(__dirname, 'config.yaml')));
 
-const defaultConfig = { logger, config: null };
+const defaultConfig = { logger, config };
 
 describe('memory unit test .', () => {
   describe('LocalMemory', () => {
     test('should create an LocalMemory instance', () => {
-      const localMemory: IPluginStorage<ConfigMemory> = new LocalMemory(config, defaultConfig);
+      const localMemory: pluginUtils.Storage<ConfigMemory> = new LocalMemory(
+        { limit: 10 },
+        { ...defaultConfig, config }
+      );
 
       expect(localMemory).toBeDefined();
     });
 
-    test('should create add a package', (done) => {
-      const localMemory: IPluginStorage<ConfigMemory> = new LocalMemory(config, defaultConfig);
-      localMemory.add('test', (err: VerdaccioError) => {
-        expect(err).toBeNull();
-        localMemory.get((err: VerdaccioError, data: DataHandler) => {
-          expect(err).toBeNull();
-          expect(data).toHaveLength(1);
-          done();
-        });
-      });
-    });
-
-    test('should reach max limit', (done) => {
-      config.limit = 2;
-      const localMemory: IPluginStorage<ConfigMemory> = new LocalMemory(config, defaultConfig);
-
-      localMemory.add('test1', (err) => {
-        expect(err).toBeNull();
-        localMemory.add('test2', (err) => {
-          expect(err).toBeNull();
-          localMemory.add('test3', (err) => {
-            expect(err).not.toBeNull();
-            expect(err.message).toMatch(/Storage memory has reached limit of limit packages/);
-            done();
+    test('should create add a package', () => {
+      return new Promise((done) => {
+        const localMemory: pluginUtils.Storage<ConfigMemory> = new LocalMemory(
+          { limit: 10 },
+          { ...defaultConfig, config }
+        );
+        localMemory.add('test').then(() => {
+          localMemory.get().then((data: DataHandler) => {
+            expect(data).toHaveLength(1);
+            done(true);
           });
         });
       });
     });
 
-    test('should remove a package', (done) => {
-      const pkgName = 'test';
-      const localMemory: IPluginStorage<ConfigMemory> = new LocalMemory(config, defaultConfig);
-      localMemory.add(pkgName, (err) => {
-        expect(err).toBeNull();
-        localMemory.remove(pkgName, (err) => {
-          expect(err).toBeNull();
-          localMemory.get((err, data) => {
-            expect(err).toBeNull();
-            expect(data).toHaveLength(0);
-            done();
+    test('should reach max limit', () => {
+      return new Promise((done) => {
+        const localMemory: pluginUtils.Storage<ConfigMemory> = new LocalMemory(
+          { limit: 2 },
+          defaultConfig
+        );
+
+        localMemory.add('test1').then(() => {
+          localMemory.add('test2').then(() => {
+            localMemory.add('test3').catch((err) => {
+              expect(err).not.toBeNull();
+              expect(err.message).toMatch(/Storage memory has reached limit of limit packages/);
+              done(true);
+            });
+          });
+        });
+      });
+    });
+
+    test('should remove a package', () => {
+      return new Promise((done) => {
+        const pkgName = 'test';
+        const localMemory: pluginUtils.Storage<ConfigMemory> = new LocalMemory(
+          {},
+          { ...defaultConfig, config }
+        );
+        localMemory.add(pkgName).then(() => {
+          localMemory.remove(pkgName).then(() => {
+            localMemory.get().then((data) => {
+              expect(data).toHaveLength(0);
+              done(true);
+            });
           });
         });
       });

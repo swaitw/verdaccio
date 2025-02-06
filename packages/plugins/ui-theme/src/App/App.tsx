@@ -1,27 +1,38 @@
+/* eslint-disable react/jsx-pascal-case */
+
 /* eslint-disable react/jsx-max-depth */
 import styled from '@emotion/styled';
-import isNil from 'lodash/isNil';
-import React, { useState, useEffect, Suspense } from 'react';
+import Box from '@mui/material/Box';
+import FlagsIcon from 'country-flag-icons/react/3x2';
+import React, { StrictMode, Suspense, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import ReactMarkdown from 'react-markdown';
 import { Router } from 'react-router-dom';
 
-import Box from 'verdaccio-ui/components/Box';
-import Loading from 'verdaccio-ui/components/Loading';
-import loadDayJSLocale from 'verdaccio-ui/design-tokens/load-dayjs-locale';
-import StyleBaseline from 'verdaccio-ui/design-tokens/StyleBaseline';
-import { Theme } from 'verdaccio-ui/design-tokens/theme';
-import { isTokenExpire } from 'verdaccio-ui/utils/login';
-import storage from 'verdaccio-ui/utils/storage';
+import {
+  Footer,
+  Header,
+  HeaderInfoDialog,
+  Loading,
+  Theme,
+  TranslatorProvider,
+  useConfig,
+} from '@verdaccio/ui-components';
 
-import AppContextProvider from './AppContextProvider';
+import Contributors from '../components/Contributors';
+import Support from '../components/Support';
+import about from '../components/about.md';
+import license from '../components/license.md';
+import i18n from '../i18n/config';
+import { listLanguages } from '../i18n/enabledLanguages';
+import loadDayJSLocale from '../i18n/load-dayjs-locale';
 import AppRoute, { history } from './AppRoute';
-import Footer from './Footer';
-import Header from './Header';
 
-import '../../i18n/config';
-
-const StyledBox = styled(Box)<{ theme?: Theme }>(({ theme }) => ({
-  backgroundColor: theme?.palette.background.default,
-}));
+const StyledBox = styled(Box)<{ theme?: Theme }>(({ theme }) => {
+  return {
+    backgroundColor: theme?.palette.background.default,
+  };
+});
 
 const StyledBoxContent = styled(Box)<{ theme?: Theme }>(({ theme }) => ({
   [`@media screen and (min-width: ${theme?.breakPoints.container}px)`]: {
@@ -32,55 +43,68 @@ const StyledBoxContent = styled(Box)<{ theme?: Theme }>(({ theme }) => ({
   },
 }));
 
-/* eslint-disable react/jsx-no-bind */
-/* eslint-disable react-hooks/exhaustive-deps */
+const Flags = styled('span')<{ theme?: Theme }>(() => ({
+  width: '25px',
+}));
+
+function CustomInfoDialog({ onCloseDialog, title, isOpen }) {
+  const { t } = useTranslation();
+  return (
+    <HeaderInfoDialog
+      dialogTitle={title}
+      isOpen={isOpen}
+      onCloseDialog={onCloseDialog}
+      tabPanels={[
+        {
+          element: (
+            <>
+              <ReactMarkdown>{about}</ReactMarkdown>
+              <Contributors />
+            </>
+          ),
+        },
+        { element: <ReactMarkdown>{license}</ReactMarkdown> },
+        { element: <Support /> },
+      ]}
+      tabs={[
+        { label: t('about') },
+        { label: t('dialog.license') },
+        {
+          label: '',
+          icon: (
+            <Flags>
+              <FlagsIcon.UA />
+            </Flags>
+          ),
+        },
+      ]}
+    />
+  );
+}
+
 const App: React.FC = () => {
-  const [user, setUser] = useState<undefined | { username: string | null }>();
-  /**
-   * Logout user
-   * Required by: <Header />
-   */
-  const logout = () => {
-    storage.removeItem('username');
-    storage.removeItem('token');
-    setUser(undefined);
-  };
-
-  const checkUserAlreadyLoggedIn = () => {
-    // checks for token validity
-    const token = storage.getItem('token');
-    const username = storage.getItem('username');
-
-    if (isTokenExpire(token) || isNil(username)) {
-      logout();
-      return;
-    }
-
-    setUser({ username });
-  };
+  const { configOptions } = useConfig();
 
   useEffect(() => {
-    checkUserAlreadyLoggedIn();
     loadDayJSLocale();
   }, []);
 
   return (
-    <Suspense fallback={<Loading />}>
-      <StyleBaseline />
-      <StyledBox display="flex" flexDirection="column" height="100%">
-        <>
-          <Router history={history}>
-            <AppContextProvider user={user}>
-              <Header />
+    <StrictMode>
+      <TranslatorProvider i18n={i18n} listLanguages={listLanguages} onMount={loadDayJSLocale}>
+        <Suspense fallback={<Loading />}>
+          <StyledBox display="flex" flexDirection="column" height="100%">
+            <Router history={history}>
+              <Header HeaderInfoDialog={CustomInfoDialog} />
               <StyledBoxContent flexGrow={1}>
                 <AppRoute />
               </StyledBoxContent>
-            </AppContextProvider>
-          </Router>
-          <Footer />
-        </>
-      </StyledBox>
-    </Suspense>
+            </Router>
+            {configOptions.showFooter && <Footer />}
+          </StyledBox>
+        </Suspense>
+      </TranslatorProvider>
+    </StrictMode>
   );
 };
 

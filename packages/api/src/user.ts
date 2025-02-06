@@ -1,41 +1,87 @@
-import _ from 'lodash';
-import { Response, Router } from 'express';
 import buildDebug from 'debug';
+import { Response, Router } from 'express';
 
-import { getAuthenticatedMessage, validatePassword, ErrorCode } from '@verdaccio/utils';
 import { getApiToken } from '@verdaccio/auth';
-import { logger } from '@verdaccio/logger';
+import { Auth } from '@verdaccio/auth';
 import { createRemoteUser } from '@verdaccio/config';
-
+import {
+  API_ERROR,
+  API_MESSAGE,
+  HEADERS,
+  HTTP_STATUS,
+  errorUtils,
+  validatioUtils,
+} from '@verdaccio/core';
+import { USER_API_ENDPOINTS, rateLimit } from '@verdaccio/middleware';
+import { Logger } from '@verdaccio/types';
 import { Config, RemoteUser } from '@verdaccio/types';
-import { IAuth } from '@verdaccio/auth';
-import { API_ERROR, API_MESSAGE, HTTP_STATUS } from '@verdaccio/commons-api';
-import { $RequestExtend, $NextFunctionVer } from '../types/custom';
+import { getAuthenticatedMessage, mask } from '@verdaccio/utils';
+
+import { $NextFunctionVer, $RequestExtend } from '../types/custom';
 
 const debug = buildDebug('verdaccio:api:user');
 
-export default function (route: Router, auth: IAuth, config: Config): void {
+export default function (route: Router, auth: Auth, config: Config, logger: Logger): void {
   route.get(
-    '/-/user/:org_couchdb_user',
+    USER_API_ENDPOINTS.get_user,
+    rateLimit(config?.userRateLimit),
     function (req: $RequestExtend, res: Response, next: $NextFunctionVer): void {
       debug('verifying user');
+
+      if (
+        !req.remote_user ||
+        typeof req.remote_user.name !== 'string' ||
+        req.remote_user.name === ''
+      ) {
+        debug('user not logged in');
+        res.status(HTTP_STATUS.OK);
+        return next({ ok: false });
+      }
+
+      const username = req.params.org_couchdb_user.split(':')[1];
       const message = getAuthenticatedMessage(req.remote_user.name);
       debug('user authenticated message %o', message);
       res.status(HTTP_STATUS.OK);
       next({
+        // 'npm owner' requires user info
+        // TODO: we don't have the email
+        name: username,
+        email: '',
         ok: message,
       });
     }
   );
 
+  /**
+ *  
+ *  body example
+ *  req.body = {
+      _id: "org.couchdb.user:jjjj",
+      name: "jjjj",
+      password: "jjjj",
+      type: "user",
+      roles: [],
+      date: "2022-07-08T15:51:04.002Z",
+    }
+ * 
+ * @export
+ * @param {Router} route
+ * @param {Auth} auth
+ * @param {Config} config
+ */
   route.put(
-    '/-/user/:org_couchdb_user/:_rev?/:revision?',
+    USER_API_ENDPOINTS.add_user,
+    rateLimit(config?.userRateLimit),
     function (req: $RequestExtend, res: Response, next: $NextFunctionVer): void {
       const { name, password } = req.body;
       debug('login or adduser');
-      const remoteName = req.remote_user.name;
+      const remoteName = req?.remote_user?.name;
 
-      if (_.isNil(remoteName) === false && _.isNil(name) === false && remoteName === name) {
+      if (!validatioUtils.validateUserName(req.params.org_couchdb_user, name)) {
+        return next(errorUtils.getBadRequest(API_ERROR.USERNAME_MISMATCH));
+      }
+
+      if (typeof remoteName !== 'undefined' && typeof name === 'string' && remoteName === name) {
         debug('login: no remote user detected');
         auth.authenticate(
           name,
@@ -47,18 +93,19 @@ export default function (route: Router, auth: IAuth, config: Config): void {
                 'authenticating for user @{username} failed. Error: @{err.message}'
               );
               return next(
-                ErrorCode.getCode(HTTP_STATUS.UNAUTHORIZED, API_ERROR.BAD_USERNAME_PASSWORD)
+                errorUtils.getCode(HTTP_STATUS.UNAUTHORIZED, API_ERROR.BAD_USERNAME_PASSWORD)
               );
             }
 
-            const restoredRemoteUser: RemoteUser = createRemoteUser(name, user.groups || []);
+            const restoredRemoteUser: RemoteUser = createRemoteUser(name, user?.groups || []);
             const token = await getApiToken(auth, config, restoredRemoteUser, password);
             debug('login: new token');
             if (!token) {
-              return next(ErrorCode.getUnauthorized());
+              return next(errorUtils.getUnauthorized());
             }
 
             res.status(HTTP_STATUS.CREATED);
+            res.set(HEADERS.CACHE_CONTROL, 'no-cache, no-store');
 
             const message = getAuthenticatedMessage(req.remote_user.name);
             debug('login: created user message %o', message);
@@ -70,10 +117,16 @@ export default function (route: Router, auth: IAuth, config: Config): void {
           }
         );
       } else {
-        if (validatePassword(password) === false) {
+        debug('adduser: %o', name);
+        if (
+          validatioUtils.validatePassword(
+            password,
+            config?.serverSettings?.passwordValidationRegex
+          ) === false
+        ) {
           debug('adduser: invalid password');
           // eslint-disable-next-line new-cap
-          return next(ErrorCode.getCode(HTTP_STATUS.BAD_REQUEST, API_ERROR.PASSWORD_SHORT()));
+          return next(errorUtils.getCode(HTTP_STATUS.BAD_REQUEST, API_ERROR.PASSWORD_SHORT));
         }
 
         auth.add_user(name, password, async function (err, user): Promise<void> {
@@ -84,21 +137,26 @@ export default function (route: Router, auth: IAuth, config: Config): void {
               // and npm accepts only an 409 error.
               // So, changing status code here.
               return next(
-                ErrorCode.getCode(err.status, err.message) || ErrorCode.getConflict(err.message)
+                errorUtils.getCode(err.status, err.message) || errorUtils.getConflict(err.message)
               );
             }
             return next(err);
           }
 
           const token =
-            name && password ? await getApiToken(auth, config, user, password) : undefined;
-          debug('adduser: new token %o', token);
+            name && password
+              ? await getApiToken(auth, config, user as RemoteUser, password)
+              : undefined;
+          if (token) {
+            debug('adduser: new token %o', mask(token as string, 4));
+          }
           if (!token) {
-            return next(ErrorCode.getUnauthorized());
+            return next(errorUtils.getUnauthorized());
           }
 
           req.remote_user = user;
           res.status(HTTP_STATUS.CREATED);
+          res.set(HEADERS.CACHE_CONTROL, 'no-cache, no-store');
           debug('adduser: user has been created');
           return next({
             ok: `user '${req.body.name}' created`,
@@ -110,7 +168,7 @@ export default function (route: Router, auth: IAuth, config: Config): void {
   );
 
   route.delete(
-    '/-/user/token/*',
+    USER_API_ENDPOINTS.user_token,
     function (req: $RequestExtend, res: Response, next: $NextFunctionVer): void {
       res.status(HTTP_STATUS.OK);
       next({

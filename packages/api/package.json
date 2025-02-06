@@ -1,6 +1,6 @@
 {
   "name": "@verdaccio/api",
-  "version": "6.0.0-6-next.12",
+  "version": "8.1.0-next-8.8",
   "description": "loaders logic",
   "main": "./build/index.js",
   "types": "build/index.d.ts",
@@ -25,12 +25,11 @@
     "verdaccio"
   ],
   "engines": {
-    "node": ">=10",
-    "npm": ">=6"
+    "node": ">=18"
   },
   "scripts": {
     "clean": "rimraf ./build",
-    "test": "cross-env NODE_ENV=test BABEL_ENV=test jest",
+    "test": "vitest run",
     "type-check": "tsc --noEmit -p tsconfig.build.json",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.build.json",
     "build:js": "babel src/ --out-dir build/ --copy-files --extensions \".ts,.tsx\" --source-maps",
@@ -39,28 +38,27 @@
   },
   "license": "MIT",
   "dependencies": {
-    "@verdaccio/auth": "workspace:6.0.0-6-next.9",
-    "@verdaccio/commons-api": "workspace:11.0.0-alpha.3",
-    "@verdaccio/config": "workspace:6.0.0-6-next.7",
-    "@verdaccio/hooks": "workspace:6.0.0-6-next.4",
-    "@verdaccio/logger": "workspace:6.0.0-6-next.4",
-    "@verdaccio/middleware": "workspace:6.0.0-6-next.9",
-    "@verdaccio/store": "workspace:6.0.0-6-next.10",
-    "@verdaccio/tarball": "workspace:11.0.0-6-next.6",
-    "@verdaccio/utils": "workspace:6.0.0-6-next.5",
-    "cookies": "0.8.0",
-    "debug": "^4.1.1",
-    "express": "4.17.1",
-    "lodash": "^4.17.20",
-    "mime": "2.4.4",
-    "semver": "7.3.2"
+    "@verdaccio/auth": "workspace:8.0.0-next-8.8",
+    "@verdaccio/config": "workspace:8.0.0-next-8.8",
+    "@verdaccio/core": "workspace:8.0.0-next-8.8",
+    "@verdaccio/logger": "workspace:8.0.0-next-8.8",
+    "@verdaccio/middleware": "workspace:8.0.0-next-8.8",
+    "@verdaccio/store": "workspace:8.0.0-next-8.8",
+    "@verdaccio/utils": "workspace:8.1.0-next-8.8",
+    "abortcontroller-polyfill": "1.7.8",
+    "body-parser": "1.20.3",
+    "cookies": "0.9.1",
+    "debug": "4.4.0",
+    "express": "4.21.2",
+    "lodash": "4.17.21",
+    "mime": "2.6.0",
+    "semver": "7.7.1"
   },
   "devDependencies": {
-    "@verdaccio/server": "workspace:6.0.0-6-next.16",
-    "@verdaccio/types": "workspace:11.0.0-6-next.7",
-    "body-parser": "1.19.0",
-    "lodash": "^4.17.20",
-    "supertest": "next"
+    "@verdaccio/test-helper": "workspace:4.0.0-next-8.3",
+    "@verdaccio/types": "workspace:13.0.0-next-8.3",
+    "mockdate": "3.0.5",
+    "supertest": "7.0.0"
   },
   "funding": {
     "type": "opencollective",

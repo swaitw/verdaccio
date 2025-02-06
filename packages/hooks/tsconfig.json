@@ -14,10 +14,7 @@
       "path": "../config"
     },
     {
-      "path": "../core/commons-api"
-    },
-    {
-      "path": "../logger"
+      "path": "../logger/logger"
     }
   ]
 }

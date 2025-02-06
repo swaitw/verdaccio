@@ -1,14 +1,121 @@
-import assert from 'assert';
-import { Package } from '@verdaccio/types';
-import { DIST_TAGS } from '@verdaccio/commons-api';
-import { normalizePackage, mergeUplinkTimeIntoLocal, STORAGE } from '../src/storage-utils';
+import { describe, expect, test } from 'vitest';
 
-import { tagVersion } from '../src/storage-utils';
+import { DIST_TAGS } from '@verdaccio/core';
+import { generatePackageMetadata } from '@verdaccio/test-helper';
+import { Manifest } from '@verdaccio/types';
+
+import {
+  STORAGE,
+  cleanUpReadme,
+  hasInvalidPublishBody,
+  isDeprecatedManifest,
+  isDifferentThanOne,
+  mergeUplinkTimeIntoLocal,
+  normalizeDistTags,
+  normalizePackage,
+} from '../src/lib/storage-utils';
 import { readFile } from './fixtures/test.utils';
 
 describe('Storage Utils', () => {
+  describe('normalizeDistTags', () => {
+    const dist = (version) => ({
+      tarball: `http://registry.org/npm_test/-/npm_test-${version}.tgz`,
+      shasum: `sha1-${version}`,
+    });
+    const metadata = {
+      name: 'npm_test',
+      versions: {
+        '1.0.0': { dist: dist('1.0.0') },
+        '1.0.1': { dist: dist('1.0.1') },
+        '0.2.1-1': { dist: dist('0.2.1-1') },
+        '0.2.1-alpha': { dist: dist('0.2.1-alpha') },
+        '0.2.1-alpha.0': { dist: dist('0.2.1-alpha.0') },
+      },
+    };
+    const cloneMetadata: Manifest | any = (pkg = metadata) => Object.assign({}, pkg);
+
+    describe('tag as arrays [deprecated]', () => {
+      test('should delete a invalid latest version', () => {
+        const pkg = cloneMetadata();
+        pkg[DIST_TAGS] = {
+          latest: '20000',
+        };
+
+        normalizeDistTags(pkg);
+
+        expect(Object.keys(pkg[DIST_TAGS])).toHaveLength(0);
+      });
+
+      test('should define last published version as latest', () => {
+        const pkg = cloneMetadata();
+        pkg[DIST_TAGS] = {};
+
+        normalizeDistTags(pkg);
+
+        expect(pkg[DIST_TAGS]).toEqual({ latest: '1.0.1' });
+      });
+
+      test('should define last published version as latest with a custom dist-tag', () => {
+        const pkg = cloneMetadata();
+        pkg[DIST_TAGS] = {
+          beta: '1.0.1',
+        };
+
+        normalizeDistTags(pkg);
+
+        expect(pkg[DIST_TAGS]).toEqual({ beta: '1.0.1', latest: '1.0.1' });
+      });
+
+      test('should convert any array of dist-tags to a plain string', () => {
+        const pkg = cloneMetadata();
+        pkg[DIST_TAGS] = {
+          latest: ['1.0.1'],
+        };
+
+        normalizeDistTags(pkg);
+
+        expect(pkg[DIST_TAGS]).toEqual({ latest: '1.0.1' });
+      });
+
+      test('should convert any empty array to empty list of dist-tags', () => {
+        const pkg = cloneMetadata();
+        pkg[DIST_TAGS] = {
+          latest: [],
+        };
+
+        expect(normalizeDistTags(pkg)[DIST_TAGS]).toEqual({});
+      });
+    });
+
+    test('should clean up a invalid latest version', () => {
+      const pkg = cloneMetadata();
+      pkg[DIST_TAGS] = {
+        latest: '20000',
+      };
+
+      expect(Object.keys(normalizeDistTags(pkg)[DIST_TAGS])).toHaveLength(0);
+    });
+
+    test('should handle empty dis-tags and define last published version as latest', () => {
+      const pkg = cloneMetadata();
+      pkg[DIST_TAGS] = {};
+
+      expect(normalizeDistTags(pkg)[DIST_TAGS]).toEqual({ latest: '1.0.1' });
+    });
+
+    test('should define last published version as latest with a custom dist-tag', () => {
+      const pkg = cloneMetadata();
+      pkg[DIST_TAGS] = {
+        beta: '1.0.1',
+      };
+
+      expect(normalizeDistTags(pkg)[DIST_TAGS]).toEqual({ beta: '1.0.1', latest: '1.0.1' });
+    });
+  });
+
   describe('normalizePackage', () => {
     test('normalizePackage clean', () => {
+      // @ts-expect-error
       const pkg = normalizePackage({
         _attachments: {},
         _distfiles: {},
@@ -59,7 +166,7 @@ describe('Storage Utils', () => {
       '1.0.7': '2018-06-12T20:35:07.621Z',
     };
     test('mergeTime basic', () => {
-      const pkg1: Package = {
+      const pkg1: Manifest = {
         _attachments: {},
         _distfiles: {},
         _rev: '',
@@ -74,7 +181,7 @@ describe('Storage Utils', () => {
         [DIST_TAGS]: {},
       };
 
-      const pkg2: Package = {
+      const pkg2: Manifest = {
         _attachments: {},
         _distfiles: {},
         _rev: '',
@@ -99,7 +206,7 @@ describe('Storage Utils', () => {
     });
 
     test('mergeTime remote empty', () => {
-      const pkg1: Package = {
+      const pkg1: Manifest = {
         _attachments: {},
         _distfiles: {},
         _rev: '',
@@ -114,13 +221,14 @@ describe('Storage Utils', () => {
         [DIST_TAGS]: {},
       };
 
-      const pkg2: Package = {
+      const pkg2: Manifest = {
         _attachments: {},
         _distfiles: {},
         _rev: '',
         _uplinks: {},
         name: '',
         versions: {},
+        time: {},
         [DIST_TAGS]: {},
       };
       const mergedPkg = mergeUplinkTimeIntoLocal(pkg1, pkg2);
@@ -128,46 +236,174 @@ describe('Storage Utils', () => {
     });
   });
 
-  describe('tagVersion', () => {
-    test('add new one', () => {
-      let pkg = {
-        versions: {},
-        'dist-tags': {},
-      };
+  describe('isDeprecatedManifest', () => {
+    test('is not deprecated manifest', () => {
+      const pkg = generatePackageMetadata('foo');
+      expect(isDeprecatedManifest(pkg)).toBe(false);
+    });
 
+    test('is not deprecated manifest no _attachments', () => {
+      const pkg = generatePackageMetadata('foo');
       // @ts-ignore
-      assert(tagVersion(pkg, '1.1.1', 'foo', {}));
-      assert.deepEqual(pkg, {
-        versions: {},
-        'dist-tags': { foo: '1.1.1' },
+      delete pkg._attachments;
+      expect(isDeprecatedManifest(pkg)).toBe(false);
+    });
+
+    test('is deprecated manifest', () => {
+      const pkg = generatePackageMetadata('foo', '2.0.0');
+      // @ts-ignore
+      pkg.versions['2.0.0'].deprecated = 'some reason';
+      pkg._attachments = {};
+      expect(isDeprecatedManifest(pkg)).toBe(true);
+    });
+
+    test('is not deprecated manifest if _attachment contains data', () => {
+      const pkg = generatePackageMetadata('foo', '2.0.0');
+      // @ts-ignore
+      pkg.versions['2.0.0'].deprecated = 'some reason';
+      pkg._attachments = {
+        ['2.0.0']: {
+          data: 'fooData',
+        },
+      };
+      expect(isDeprecatedManifest(pkg)).toBe(false);
+    });
+  });
+
+  describe('isDifferentThanOne', () => {
+    test('isDifferentThanOne is true', () => {
+      expect(isDifferentThanOne({})).toBeTruthy();
+    });
+    test('isDifferentThanOne is false', () => {
+      expect(
+        isDifferentThanOne({
+          foo: 'bar',
+        })
+      ).toBeFalsy();
+    });
+    test('isDifferentThanOne with two items is true', () => {
+      expect(
+        isDifferentThanOne({
+          foo: 'bar',
+          foo1: 'bar',
+        })
+      ).toBeTruthy();
+    });
+  });
+
+  describe('hasInvalidPublishBody', () => {
+    test('should be valid', () => {
+      expect(
+        hasInvalidPublishBody({
+          _attachments: {
+            'forbidden-place-1.0.6.tgz': {
+              content_type: 'application/octet-stream',
+              data: 'foo',
+              length: 512,
+            },
+          },
+          versions: {
+            // @ts-expect-error
+            '1.0.0': {},
+          },
+        })
+      ).toBeFalsy();
+    });
+
+    test('should be invalid due missing versions', () => {
+      expect(
+        hasInvalidPublishBody({
+          _attachments: {},
+          versions: {},
+        })
+      ).toBeTruthy();
+    });
+
+    test('should be invalid due missing _attachments', () => {
+      expect(
+        hasInvalidPublishBody({
+          _attachments: {},
+          versions: {},
+        })
+      ).toBeTruthy();
+    });
+
+    test('should be invalid due invalid empty versions  object', () => {
+      expect(
+        hasInvalidPublishBody({
+          _attachments: {
+            'forbidden-place-1.0.6.tgz': {
+              content_type: 'application/octet-stream',
+              data: 'foo',
+              length: 512,
+            },
+          },
+          versions: {},
+        })
+      ).toBeTruthy();
+    });
+
+    test('should be invalid due empty _attachments object', () => {
+      expect(
+        hasInvalidPublishBody({
+          _attachments: {},
+          versions: {
+            // @ts-expect-error
+            '1.0.0': {},
+            // @ts-expect-error
+            '1.0.1': {},
+          },
+        })
+      ).toBeTruthy();
+    });
+  });
+
+  describe('cleanUpReadme', () => {
+    describe('should keep only latest readme', () => {
+      test('should clean up readme (no dist-tags)', () => {
+        const manifest = generatePackageMetadata('foo');
+        const version = manifest.versions['1.0.0'];
+        const cleanup = cleanUpReadme(version);
+        expect(cleanup.readme).toEqual('');
+      });
+
+      test('should clean up readme (latest in dist-tag)', () => {
+        const manifest = generatePackageMetadata('foo');
+        const version = manifest.versions['1.0.0'];
+        const cleanup = cleanUpReadme(version, manifest[DIST_TAGS]);
+        expect(cleanup.readme).toEqual('');
       });
     });
 
-    test('add (compat)', () => {
-      const x = {
-        versions: {},
-        'dist-tags': { foo: '1.1.0' },
-      };
+    describe('should keep only tagged readme', () => {
+      test('should clean up readme (no dist-tags)', () => {
+        const manifest = generatePackageMetadata('foo');
+        const version = manifest.versions['1.0.0'];
+        const cleanup = cleanUpReadme(version, undefined, 'tagged');
+        expect(cleanup.readme).toEqual('');
+      });
 
-      // @ts-ignore
-      assert(tagVersion(x, '1.1.1', 'foo'));
-      assert.deepEqual(x, {
-        versions: {},
-        'dist-tags': { foo: '1.1.1' },
+      test('should keep readme (version in dist-tag)', () => {
+        const manifest = generatePackageMetadata('foo');
+        const version = manifest.versions['1.0.0'];
+        const cleanup = cleanUpReadme(version, manifest[DIST_TAGS], 'tagged');
+        expect(cleanup.readme).toEqual('# test');
       });
     });
 
-    test('add fresh tag', () => {
-      let x = {
-        versions: {},
-        'dist-tags': { foo: '1.1.0' },
-      };
+    describe('should keep all readmes', () => {
+      test('should keep readme (no dist-tags)', () => {
+        const manifest = generatePackageMetadata('foo');
+        const version = manifest.versions['1.0.0'];
+        const cleanup = cleanUpReadme(version, undefined, 'all');
+        expect(cleanup.readme).toEqual('# test');
+      });
 
-      // @ts-ignore
-      assert(tagVersion(x, '1.1.1', 'foo'));
-      assert.deepEqual(x, {
-        versions: {},
-        'dist-tags': { foo: '1.1.1' },
+      test('should keep readme (version in dist-tag)', () => {
+        const manifest = generatePackageMetadata('foo');
+        const version = manifest.versions['1.0.0'];
+        const cleanup = cleanUpReadme(version, manifest[DIST_TAGS], 'all');
+        expect(cleanup.readme).toEqual('# test');
       });
     });
   });

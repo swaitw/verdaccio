@@ -3,7 +3,6 @@ import webpack from 'webpack';
 import WebpackDevServer from 'webpack-dev-server';
 
 import env from '../config/env';
-
 import config from './webpack.dev.config.babel';
 
 const compiler = webpack(config);
@@ -41,7 +40,7 @@ new WebpackDevServer(compiler, {
       target: 'http://localhost:8000',
     },
   ],
-}).listen(port, 'localhost', function (err) {
+}).listen(port, '0.0.0.0', function (err) {
   if (err) {
     return console.log(err);
   }

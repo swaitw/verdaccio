@@ -1,6 +1,6 @@
 {
   "name": "@verdaccio/config",
-  "version": "6.0.0-6-next.7",
+  "version": "8.0.0-next-8.8",
   "description": "logger",
   "main": "./build/index.js",
   "types": "build/index.d.ts",
@@ -26,12 +26,11 @@
     "verdaccio"
   ],
   "engines": {
-    "node": ">=10",
-    "npm": ">=6"
+    "node": ">=18"
   },
   "scripts": {
     "clean": "rimraf ./build",
-    "test": "cross-env NODE_ENV=test BABEL_ENV=test jest",
+    "test": "vitest run",
     "type-check": "tsc --noEmit -p tsconfig.build.json",
     "build:types": "tsc --emitDeclarationOnly -p tsconfig.build.json",
     "build:js": "babel src/ --out-dir build/ --copy-files --extensions \".ts,.tsx\" --source-maps",
@@ -39,17 +38,15 @@
     "build": "pnpm run build:js && pnpm run build:types"
   },
   "dependencies": {
-    "@verdaccio/commons-api": "workspace:11.0.0-alpha.3",
-    "@verdaccio/utils": "workspace:6.0.0-6-next.5",
-    "debug": "^4.2.0",
-    "js-yaml": "3.14.0",
-    "lodash": "^4.17.20",
-    "minimatch": "3.0.4",
-    "yup": "^0.29.3"
+    "@verdaccio/core": "workspace:8.0.0-next-8.8",
+    "@verdaccio/utils": "workspace:8.1.0-next-8.8",
+    "debug": "4.4.0",
+    "js-yaml": "4.1.0",
+    "lodash": "4.17.21",
+    "minimatch": "7.4.6"
   },
   "devDependencies": {
-    "@types/minimatch": "3.0.3",
-    "@types/yup": "^0.29.9"
+    "@types/minimatch": "5.1.2"
   },
   "funding": {
     "type": "opencollective",
